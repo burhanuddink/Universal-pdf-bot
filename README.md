@@ -63,7 +63,7 @@ This project requires a Google Gemini API key.
 * Clone the repository:
 
 ```bash
-git clone [https://github.com/burhanuddink/Universal-pdf-bot.git](https://github.com/burhanuddink/Universal-pdf-bot.git)
+git clone https://github.com/burhanuddink/Universal-pdf-bot.git
 cd Universal-pdf-bot
 ```
 * Install dependencies:
