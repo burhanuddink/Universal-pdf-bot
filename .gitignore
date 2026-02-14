@@ -1,0 +1,13 @@
+# Ignore API keys and secrets
+.env
+API_KEY.env
+secrets.toml
+
+# Ignore system files
+__pycache__/
+*.pyc
+.DS_Store
+
+# Ignore virtual environments (if you use them)
+venv/
+.venv/
