@@ -349,6 +349,14 @@ else:
     st.info("""
     👋 **Welcome! Upload a PDF to start chatting.**
     
+    ### How to use this tool:
+    1. **Upload a PDF** in the sidebar.
+    2. **Select a Mode** (Strict for contracts, Helpful for summaries).
+    3. **Start Chatting**!
+        
+    > **⚠️ Important:** Please ensure your PDF has **selectable text**. 
+    > Scanned documents (images) are not currently supported without OCR.
+            
     **Works with:**
     - 📄 Legal contracts & agreements
     - 📊 Presentation slides
@@ -362,7 +370,7 @@ else:
     """)
 
     with st.expander("💡 Example Questions"):
-        st.markdown("""
+        st.markdown("""                  
         **For Contracts:**
         - "What is the termination clause?"
         - "What are the payment terms?"
