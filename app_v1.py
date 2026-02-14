@@ -7,11 +7,10 @@ from datetime import datetime
 import logging
 import hashlib
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- 1. SETUP PAGE & ENV ---
+# Environment Page Setup
 st.set_page_config(
     page_title="Universal PDF Bot", 
     page_icon="🤖", 
@@ -21,11 +20,9 @@ st.set_page_config(
 
 st.header("🤖 Universal PDF Chatbot")
 
-# Load API Key with fallback
 load_dotenv("API_KEY.env")
 api_key = os.getenv("GOOGLE_API_KEY")
 
-# Try Streamlit secrets as fallback
 if not api_key and hasattr(st, 'secrets'):
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -41,7 +38,6 @@ if not api_key:
     """)
     st.stop()
 
-# --- 2. IMPORTS ---
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFLoader
@@ -50,12 +46,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
-# --- 3. HELPER FUNCTIONS ---
 def get_file_hash(file_bytes):
     """Generate hash for cache invalidation"""
     return hashlib.md5(file_bytes).hexdigest()[:16]
 
-# --- 4. PDF PROCESSING ---
+# PDF processing with adaptive rate limiting and error handling
 @st.cache_resource(show_spinner=False)
 def process_pdf(file_name, _file_bytes):
     """Process PDF with adaptive rate limiting"""
@@ -65,19 +60,16 @@ def process_pdf(file_name, _file_bytes):
         tmp_path = tmp_file.name
 
     try:
-        # Load PDF
         loader = PyPDFLoader(tmp_path)
         pages = loader.load()
         
         if not pages:
             raise ValueError("Could not load PDF. It might be corrupted or password-protected.")
         
-        # Validate text content
         total_text = "".join([page.page_content for page in pages])
         if len(total_text.strip()) < 100:
             raise ValueError("PDF appears to be scanned or empty. Please use an OCR tool first.")
-        
-        # Split into chunks
+
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000, 
             chunk_overlap=200
@@ -85,7 +77,6 @@ def process_pdf(file_name, _file_bytes):
         chunks = text_splitter.split_documents(pages)
         num_chunks = len(chunks)
         
-        # Adaptive strategy
         if num_chunks <= 50:
             batch_size, delay_seconds, mode = 25, 0.3, "Fast"
         elif num_chunks <= 150:
@@ -98,7 +89,6 @@ def process_pdf(file_name, _file_bytes):
         st.info(f"📄 {mode} mode: {len(pages)} pages → {num_chunks} chunks")
         logger.info(f"Processing {file_name}: {len(pages)} pages, {num_chunks} chunks, {mode} mode")
         
-        # Create embeddings
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001",
             google_api_key=api_key
@@ -159,7 +149,7 @@ def process_pdf(file_name, _file_bytes):
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-# --- 5. RAG CHAIN ---
+# RAG CHAIN
 def get_rag_chain(vector_store, user_mode):
     """Build RAG chain with mode-specific configuration"""
     
@@ -224,7 +214,7 @@ def get_rag_chain(vector_store, user_mode):
     
     return rag_chain, retriever
 
-# --- 6. SIDEBAR ---
+# Sidebar for settings and file upload
 with st.sidebar:
     st.title("⚙️ Settings")
     
@@ -263,7 +253,6 @@ with st.sidebar:
     st.caption("• Use Helpful for slides/books")
     st.caption("• Clear cache if switching PDFs")
 
-# --- 7. INITIALIZE SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -273,9 +262,8 @@ if "current_file" not in st.session_state:
 if "current_file_hash" not in st.session_state:
     st.session_state.current_file_hash = None
 
-# --- 8. MAIN APP ---
+# MAIN APP
 if uploaded_file:
-    # File size check
     max_size_mb = 50
     file_bytes = uploaded_file.getvalue()
     file_size_mb = len(file_bytes) / (1024 * 1024)
@@ -284,7 +272,6 @@ if uploaded_file:
         st.error(f"❌ File too large ({file_size_mb:.1f}MB). Maximum: {max_size_mb}MB")
         st.stop()
     
-    # Check for file change
     current_hash = get_file_hash(file_bytes)
     
     if st.session_state.current_file_hash != current_hash:
@@ -292,32 +279,27 @@ if uploaded_file:
         st.session_state.current_file_hash = current_hash
         st.session_state.messages = []
         st.info(f"📄 New file: {uploaded_file.name} ({file_size_mb:.1f}MB)")
-    
-    # Process PDF
+
     try:
         with st.spinner("Processing PDF..."):
             vector_store = process_pdf(uploaded_file.name, file_bytes)
         
         rag_chain, retriever = get_rag_chain(vector_store, mode)
-        
-        # Chat interface
+
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
         if user_query := st.chat_input("Ask about your document..."):
-            # User message
             st.session_state.messages.append({"role": "user", "content": user_query})
             with st.chat_message("user"):
                 st.markdown(user_query)
 
-            # Assistant response
             with st.chat_message("assistant"):
                 try:
                     response_text = rag_chain.invoke(user_query)
                     st.markdown(response_text)
-                    
-                    # Sources
+
                     with st.expander("🔍 View Sources"):
                         sources = retriever.invoke(user_query)
                         for i, doc in enumerate(sources):
@@ -337,8 +319,7 @@ if uploaded_file:
                     error_msg = str(e)
                     st.error(f"❌ Error: {error_msg}")
                     logger.error(f"Query failed: {error_msg}", exc_info=True)
-                    
-                    # User-friendly suggestions
+
                     if "429" in error_msg:
                         st.warning("⏳ Rate limit reached. Please wait a minute.")
                     elif "context_length" in error_msg.lower():
@@ -348,8 +329,7 @@ if uploaded_file:
         error_msg = str(e)
         st.error(f"❌ Failed to process PDF")
         logger.error(f"PDF processing failed: {error_msg}", exc_info=True)
-        
-        # Specific error handling
+
         if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
             st.warning("⏳ API rate limit reached. Please wait a minute and reload the page.")
         elif "NOT_FOUND" in error_msg:
@@ -366,7 +346,6 @@ if uploaded_file:
             """)
 
 else:
-    # Welcome screen
     st.info("""
     👋 **Welcome! Upload a PDF to start chatting.**
     
@@ -381,8 +360,7 @@ else:
     - Source citations
     - Two modes: Strict & Helpful
     """)
-    
-    # Example questions
+
     with st.expander("💡 Example Questions"):
         st.markdown("""
         **For Contracts:**
